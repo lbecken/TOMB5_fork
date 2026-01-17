@@ -1,0 +1,79 @@
+name: Build TOMB5 PSXPC_N
+
+# When to run this workflow
+on:
+  # Run on pushes to master branch
+  push:
+    branches: [ master, main ]
+  # Run on pull requests to master branch
+  pull_request:
+    branches: [ master, main ]
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Use Windows Server 2019 (has VS 2019 pre-installed)
+    runs-on: windows-2019
+
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+    # Step 1: Check out the repository
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Step 2: Download and extract SDL2
+    - name: Download SDL2
+      run: |
+        Invoke-WebRequest -Uri "https://www.libsdl.org/release/SDL2-devel-2.0.12-VC.zip" -OutFile "SDL2.zip"
+        Expand-Archive -Path "SDL2.zip" -DestinationPath "EXTERNAL"
+        # Rename to match what CMake expects (SDL2-2.0.12)
+        # The zip extracts to SDL2-2.0.12 already, so we're good
+      shell: pwsh
+
+    # Step 3: Download and extract GLEW
+    - name: Download GLEW
+      run: |
+        Invoke-WebRequest -Uri "https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0-win32.zip/download" -OutFile "GLEW.zip" -UserAgent "Wget"
+        Expand-Archive -Path "GLEW.zip" -DestinationPath "EXTERNAL"
+      shell: pwsh
+
+    # Step 4: Create BUILD directory
+    - name: Create build directory
+      run: mkdir BUILD
+
+    # Step 5: Configure CMake (generate Visual Studio project files)
+    - name: Configure CMake
+      run: cmake -G "Visual Studio 16 2019" -A Win32 -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} ..
+      working-directory: BUILD
+
+    # Step 6: Build the project
+    - name: Build
+      run: cmake --build . --config ${{ matrix.configuration }}
+      working-directory: BUILD
+
+    # Step 7: Copy SDL2.dll to output directory
+    - name: Copy SDL2.dll
+      run: |
+        copy "EXTERNAL\SDL2-2.0.12\lib\x86\SDL2.dll" "BUILD\SPEC_PSXPC_N\${{ matrix.configuration }}\"
+      shell: cmd
+
+    # Step 8: List build outputs (for debugging)
+    - name: List build outputs
+      run: |
+        echo "=== Build output directory ==="
+        dir BUILD\SPEC_PSXPC_N\${{ matrix.configuration }}\
+      shell: cmd
+
+    # Step 9: Upload the built artifact (so you can download it)
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: TOMB5-PSXPC_N-${{ matrix.configuration }}
+        path: |
+          BUILD/SPEC_PSXPC_N/${{ matrix.configuration }}/*.exe
+          BUILD/SPEC_PSXPC_N/${{ matrix.configuration }}/*.dll
+        if-no-files-found: error
