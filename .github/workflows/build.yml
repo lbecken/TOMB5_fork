@@ -11,6 +11,13 @@ on:
   # Allow manual trigger from GitHub UI
   workflow_dispatch:
 
+# Set environment variables for the entire workflow
+env:
+  # Setting APPVEYOR=true tricks the CMakeLists.txt into skipping
+  # SPEC_PSX, SPEC_PC_N, SPEC_PSXPC, and TOOLS (which need extra dependencies)
+  # This matches how the original AppVeyor CI worked
+  APPVEYOR: true
+
 jobs:
   build:
     # Use Windows Server 2019 (has VS 2019 pre-installed)
@@ -30,8 +37,9 @@ jobs:
       run: |
         Invoke-WebRequest -Uri "https://www.libsdl.org/release/SDL2-devel-2.0.12-VC.zip" -OutFile "SDL2.zip"
         Expand-Archive -Path "SDL2.zip" -DestinationPath "EXTERNAL"
-        # Rename to match what CMake expects (SDL2-2.0.12)
-        # The zip extracts to SDL2-2.0.12 already, so we're good
+        # List what was extracted
+        Write-Host "SDL2 extracted contents:"
+        Get-ChildItem -Path "EXTERNAL" -Recurse -Depth 2
       shell: pwsh
 
     # Step 3: Download and extract GLEW
@@ -39,6 +47,9 @@ jobs:
       run: |
         Invoke-WebRequest -Uri "https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0-win32.zip/download" -OutFile "GLEW.zip" -UserAgent "Wget"
         Expand-Archive -Path "GLEW.zip" -DestinationPath "EXTERNAL"
+        # List what was extracted
+        Write-Host "GLEW extracted contents:"
+        Get-ChildItem -Path "EXTERNAL\glew-2.1.0" -Recurse -Depth 1
       shell: pwsh
 
     # Step 4: Create BUILD directory
@@ -46,9 +57,12 @@ jobs:
       run: mkdir BUILD
 
     # Step 5: Configure CMake (generate Visual Studio project files)
+    # Set SDL2 environment variable to help CMake find SDL2
     - name: Configure CMake
       run: cmake -G "Visual Studio 16 2019" -A Win32 -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} ..
       working-directory: BUILD
+      env:
+        SDL2: ${{ github.workspace }}/EXTERNAL/SDL2-2.0.12
 
     # Step 6: Build the project
     - name: Build
